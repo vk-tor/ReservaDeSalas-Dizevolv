@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #09090b; /* Deep dark background */
+  --color-background: #0F1014; /* Deep dark background */
   --color-foreground: #f3f4f6;
-  --font-sans: var(--font-inter);
+  --color-brand-orange: #FF6B2B;
+  --font-sans: var(--font-dm-sans);
+  --font-heading: var(--font-archivo);
 
   --animate-slide-in: slide-in 0.3s ease-out;
   --animate-modal-in: modal-in 0.2s ease-out;
@@ -27,6 +29,10 @@
 
 /* Selection */
 ::selection {
-  background: rgba(16, 185, 129, 0.3); /* Emerald / Neon Green */
+  background: rgba(255, 107, 43, 0.3); /* Brand Orange */
   color: #ffffff;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-archivo);
 }
