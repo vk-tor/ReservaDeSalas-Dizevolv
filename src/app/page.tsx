@@ -89,20 +89,9 @@ function Modal({ title, children, onClose }: any) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg mx-4 bg-white dark:bg-[#09090b] border border-gray-200 dark:border-gray-800 rounded-3xl shadow-2xl animate-modal-in overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800/60 bg-gray-50 dark:bg-gray-900/20">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 font-heading">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-xl leading-none transition-colors">×</button>
-        </div>
-        <div className="px-6 py-6">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function RoomCard({ room, onClick, onDelete }: any) {
+      <div className="relative z-50 w-full max-w-lg mx-4 bg-white dark:bg-[#09090b] border border-gray-200 dark:border-gray-800 rounded-3xl shadow-2xl animate-modal-in overflow-hiddenfunction RoomCard({ room, onClick, onDelete }: any) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [opacity, setOpacity] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -113,35 +102,51 @@ function RoomCard({ room, onClick, onDelete }: any) {
     <div 
       onClick={onClick}
       onMouseMove={handleMouseMove}
-      onMouseEnter={() => setOpacity(1)}
-      onMouseLeave={() => setOpacity(0)}
-      className="relative overflow-hidden p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#09090b] border border-gray-200 dark:border-gray-800 hover:border-brand-orange/50 dark:hover:border-brand-orange/50 transition-all cursor-pointer group flex flex-col justify-between h-56 shadow-sm hover:shadow-xl dark:shadow-lg dark:hover:shadow-brand-orange/10"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="relative p-[1px] rounded-[24px] cursor-pointer group h-56 transition-transform duration-300 hover:scale-[1.02] shadow-sm shadow-gray-200/50 dark:shadow-none"
     >
+      {/* Borda base */}
       <div 
-        className="pointer-events-none absolute inset-0 transition-opacity duration-300 z-0"
+        className="absolute inset-0 rounded-[24px] bg-gray-200 dark:bg-gray-800 transition-opacity duration-300 z-0"
+      />
+      
+      {/* Borda Iluminada que segue o mouse */}
+      <div 
+        className="absolute inset-0 rounded-[24px] opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0"
         style={{
-          opacity,
-          background: `radial-gradient(400px circle at ${position.x}px ${position.y}px, rgba(255,107,43,0.12), transparent 40%)`
+          background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(255,107,43,0.8), transparent 40%)`
         }}
       />
-      <div className="relative z-10 flex flex-col h-full justify-between">
-        <div>
+
+      {/* Cartão Interno */}
+      <div className="relative z-10 h-full w-full bg-white dark:bg-[#09090b] rounded-[23px] p-6 sm:p-8 flex flex-col justify-between overflow-hidden">
+        
+        {/* Brilho interno suave */}
+        <div 
+          className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0"
+          style={{
+            background: `radial-gradient(400px circle at ${position.x}px ${position.y}px, rgba(255,107,43,0.06), transparent 50%)`
+          }}
+        />
+
+        <div className="relative z-10">
           <div className="flex justify-between items-start mb-3">
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-heading group-hover:text-brand-orange transition-colors">{room.name}</h3>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-50 dark:hover:bg-red-500/10 text-xs">✕</button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-100 dark:hover:bg-red-500/10 text-xs">✕</button>
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-sm font-medium border border-gray-200/50 dark:border-transparent">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-sm font-medium border border-gray-100 dark:border-transparent shadow-sm dark:shadow-none">
             <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
             Lotação: {room.capacity}
           </div>
         </div>
-        <div className="flex justify-end">
+        <div className="flex justify-end relative z-10">
           <span className="text-sm font-bold text-brand-orange opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">Ver sessões <span className="text-xl leading-none">→</span></span>
         </div>
       </div>
     </div>
   );
-}
+
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 

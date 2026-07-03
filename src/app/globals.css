@@ -12,13 +12,20 @@
 }
 
 :root {
-  --color-background: #f9fafb;
-  --color-foreground: #111827;
+  --color-background: #f8fafc; /* slate-50, um pouco mais premium que f9fafb */
+  --color-foreground: #0f172a; /* slate-900 */
 }
 
 .dark {
   --color-background: #0F1014;
   --color-foreground: #f3f4f6;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
 }
 
 @keyframes slide-in {

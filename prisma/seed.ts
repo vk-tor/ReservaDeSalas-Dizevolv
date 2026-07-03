@@ -20,10 +20,10 @@ async function main() {
   const rooms = await Promise.all([
     prisma.room.create({ data: { name: "Auditório Dizevolv", capacity: 150 } }),
     prisma.room.create({ data: { name: "Sala de Ideação", capacity: 8 } }),
-    prisma.room.create({ data: { name: "Meeting Room Alpha", capacity: 12 } }),
+    prisma.room.create({ data: { name: "Sala Alfa", capacity: 12 } }),
     prisma.room.create({ data: { name: "Estúdio de Gravação", capacity: 4 } }),
     prisma.room.create({ data: { name: "Sala de Foco 1", capacity: 2 } }),
-    prisma.room.create({ data: { name: "Boardroom", capacity: 20 } }),
+    prisma.room.create({ data: { name: "Sala de Diretoria", capacity: 20 } }),
   ]);
 
   console.log("Salas criadas. Criando reservas...");
