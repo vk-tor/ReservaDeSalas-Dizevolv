@@ -24,6 +24,7 @@ model Reservation {
   roomId       String
   room         Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   title        String
+  host         String   @default("Anônimo") // Responsável/Dono da reserva
   participants Int
   startTime    DateTime
   endTime      DateTime

@@ -37,6 +37,7 @@ export const createReservationSchema = z
       .string()
       .min(1, "O título da reserva é obrigatório.")
       .max(200, "O título deve ter no máximo 200 caracteres."),
+    host: z.string().min(1, "O responsável é obrigatório."),
     participants: z
       .number()
       .int("O número de participantes deve ser inteiro.")
@@ -45,7 +46,8 @@ export const createReservationSchema = z
     recurrence: z
       .object({
         type: z.enum(["none", "daily", "weekly"]),
-        occurrences: z.number().int().min(1).max(52), // Max 1 ano de semanas
+        endDate: z.coerce.date().optional(),
+        daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
       })
       .optional(),
   });
@@ -58,6 +60,7 @@ export const updateReservationSchema = z
       .min(1, "O título da reserva é obrigatório.")
       .max(200, "O título deve ter no máximo 200 caracteres.")
       .optional(),
+    host: z.string().min(1, "O responsável é obrigatório.").optional(),
     participants: z
       .number()
       .int("O número de participantes deve ser inteiro.")

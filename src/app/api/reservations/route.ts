@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { roomId, title, participants, sessions, recurrence } = parsed.data;
+    const { roomId, title, host, participants, sessions, recurrence } = parsed.data;
 
     // Verificar se a sala existe e obter capacidade
     const room = await prisma.room.findUnique({ where: { id: roomId } });
@@ -78,23 +78,49 @@ export async function POST(request: Request) {
 
     // Gerar todas as sessões baseadas na recorrência
     const generatedSessions: { startTime: Date; endTime: Date }[] = [];
-    const occurrences = recurrence?.occurrences ?? 1;
     const type = recurrence?.type ?? "none";
     
-    for (let i = 0; i < occurrences; i++) {
+    if (type === "none") {
       for (const session of sessions) {
-        const start = new Date(session.startTime);
-        const end = new Date(session.endTime);
+        generatedSessions.push({ startTime: new Date(session.startTime), endTime: new Date(session.endTime) });
+      }
+    } else {
+      // Recorrência
+      const endDate = recurrence?.endDate ? new Date(recurrence.endDate) : new Date(sessions[0].startTime);
+      // Ajusta o endDate para o fim do dia
+      endDate.setUTCHours(23, 59, 59, 999);
+
+      if (endDate < new Date(sessions[0].startTime)) {
+        return NextResponse.json({ error: "Data final da recorrência inválida." }, { status: 400 });
+      }
+      
+      const maxIter = 400; // Limite de dias para evitar loops infinitos
+      
+      for (const session of sessions) {
+        let currentStart = new Date(session.startTime);
+        let currentEnd = new Date(session.endTime);
+        let iter = 0;
         
-        if (type === "daily") {
-          start.setDate(start.getDate() + i);
-          end.setDate(end.getDate() + i);
-        } else if (type === "weekly") {
-          start.setDate(start.getDate() + (i * 7));
-          end.setDate(end.getDate() + (i * 7));
+        while (currentStart <= endDate && iter < maxIter) {
+          iter++;
+          if (type === "daily") {
+            generatedSessions.push({ startTime: new Date(currentStart), endTime: new Date(currentEnd) });
+            currentStart.setDate(currentStart.getDate() + 1);
+            currentEnd.setDate(currentEnd.getDate() + 1);
+          } else if (type === "weekly") {
+            const daysOfWeek = recurrence?.daysOfWeek && recurrence.daysOfWeek.length > 0 
+              ? recurrence.daysOfWeek 
+              : [new Date(session.startTime).getDay()];
+              
+            if (daysOfWeek.includes(currentStart.getDay())) {
+              generatedSessions.push({ startTime: new Date(currentStart), endTime: new Date(currentEnd) });
+            }
+            
+            // Avança 1 dia por vez até o endDate para cobrir todos os dias da semana
+            currentStart.setDate(currentStart.getDate() + 1);
+            currentEnd.setDate(currentEnd.getDate() + 1);
+          }
         }
-        
-        generatedSessions.push({ startTime: start, endTime: end });
       }
     }
 
@@ -135,6 +161,7 @@ export async function POST(request: Request) {
           data: {
             roomId,
             title,
+            host,
             participants,
             startTime: session.startTime,
             endTime: session.endTime,

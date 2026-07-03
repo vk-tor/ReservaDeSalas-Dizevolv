@@ -16,12 +16,12 @@ interface Reservation {
   id: string;
   roomId: string;
   title: string;
+  host: string;
   participants: number;
   startTime: string;
   endTime: string;
   seriesId?: string | null;
   room?: { name: string; capacity: number };
-  warning?: string | null;
 }
 
 type ModalType =
@@ -114,7 +114,7 @@ export default function HomePage() {
 
   // Forms
   const [roomForm, setRoomForm] = useState({ name: "", capacity: "" });
-  const [resForm, setResForm] = useState({ title: "", participants: "", recurrenceType: "none", recurrenceOccurrences: "1" });
+  const [resForm, setResForm] = useState({ id: "", title: "", host: "", participants: "", recurrenceType: "none", recurrenceEndDate: "", recurrenceDays: [] as number[] });
 
   const nextDays = useMemo(() => generateNextDays(14), []);
   const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8:00 to 19:00
@@ -181,8 +181,23 @@ export default function HomePage() {
       queryClient.invalidateQueries({ queryKey: ["reservations"] });
       setActiveModal(null);
       setSelectedSlots([]);
-      setResForm({ title: "", participants: "", recurrenceType: "none", recurrenceOccurrences: "1" });
+      setResForm({ id: "", title: "", host: "", participants: "", recurrenceType: "none", recurrenceEndDate: "", recurrenceDays: [] });
       showToast("Reserva concluída!", "success");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const editReservation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch(`/api/reservations/${data.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao editar reserva");
+      return json;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reservations"] });
+      setActiveModal(null);
+      showToast("Reserva atualizada!", "success");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -256,14 +271,26 @@ export default function HomePage() {
     const en = new Date(`${selectedDate}T${String(currentEnd).padStart(2, "0")}:00:00.000Z`);
     sessions.push({ startTime: st.toISOString(), endTime: en.toISOString() });
 
+    if (resForm.id) {
+      editReservation.mutate({
+        id: resForm.id,
+        title: resForm.title,
+        host: resForm.host,
+        participants: Number(resForm.participants),
+      });
+      return;
+    }
+
     createReservation.mutate({
       roomId: selectedRoomId,
       title: resForm.title,
+      host: resForm.host,
       participants: Number(resForm.participants),
       sessions,
       recurrence: {
         type: resForm.recurrenceType,
-        occurrences: Number(resForm.recurrenceOccurrences)
+        endDate: resForm.recurrenceType !== "none" ? resForm.recurrenceEndDate : undefined,
+        daysOfWeek: resForm.recurrenceType === "weekly" ? resForm.recurrenceDays : undefined
       }
     });
   };
@@ -335,7 +362,6 @@ export default function HomePage() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-gray-100 font-heading">Sessões</h2>
-                    <button onClick={() => setActiveModal("viewReservations")} className="text-sm text-brand-orange hover:text-brand-orange/80 font-medium">Ver reservas deste dia</button>
                   </div>
                   
                   <div className="flex gap-3 overflow-x-auto pb-4 base-ui-disable-scrollbar">
@@ -402,6 +428,66 @@ export default function HomePage() {
                       </button>
                     </div>
                   )}
+
+                  {/* Reservas do dia inline */}
+                  <div className="mt-12 pt-8 border-t border-gray-800/60">
+                    <h3 className="text-lg font-bold text-gray-100 font-heading mb-6">Reservas de Hoje</h3>
+                    {!reservationsQuery.data?.length ? (
+                      <div className="text-center py-10 bg-gray-900/20 border border-dashed border-gray-800 rounded-3xl">
+                         <p className="text-gray-500 text-sm">Nenhuma reserva confirmada para este dia.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {reservationsQuery.data.map(res => {
+                          const h1 = new Date(res.startTime);
+                          const h2 = new Date(res.endTime);
+                          const now = new Date();
+                          let stateBadge = null;
+                          if (now > h2) {
+                            stateBadge = <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider">Encerrada</span>;
+                          } else if (now >= h1 && now <= h2) {
+                            stateBadge = <span className="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>Em andamento</span>;
+                          } else {
+                            stateBadge = <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider">Próxima</span>;
+                          }
+
+                          return (
+                            <div key={res.id} className="p-5 bg-[#09090b] border border-gray-800 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center group hover:border-gray-700 transition-all">
+                              <div>
+                                <div className="flex items-center gap-3 mb-1">
+                                  <h4 className="font-semibold text-gray-200 font-heading text-lg">{res.title}</h4>
+                                  {stateBadge}
+                                </div>
+                                <p className="text-sm text-gray-400 flex items-center flex-wrap gap-2 mt-2">
+                                  <span className="text-gray-300 font-medium bg-gray-800 px-2 py-0.5 rounded-md">{String(h1.getUTCHours()).padStart(2, '0')}:00 - {String(h2.getUTCHours()).padStart(2, '0')}:00</span>
+                                  <span className="opacity-30">•</span>
+                                  <span>{res.participants} pessoas</span>
+                                  <span className="opacity-30">•</span>
+                                  <span>Resp: <span className="text-brand-orange/90 font-medium">{res.host}</span></span>
+                                </p>
+                                {res.seriesId && <p className="text-xs text-brand-orange mt-3 bg-brand-orange/10 inline-block px-2 py-0.5 rounded-md border border-brand-orange/20">Série Recorrente</p>}
+                              </div>
+                              <div className="flex gap-2 mt-4 sm:mt-0 w-full sm:w-auto">
+                                <button onClick={() => {
+                                  setResForm({
+                                    id: res.id,
+                                    title: res.title,
+                                    host: res.host,
+                                    participants: String(res.participants),
+                                    recurrenceType: "none",
+                                    recurrenceEndDate: "",
+                                    recurrenceDays: []
+                                  });
+                                  setActiveModal("createReservation");
+                                }} className="flex-1 sm:flex-none px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-300 rounded-xl text-sm font-medium transition-all">Editar</button>
+                                <button onClick={() => { if(confirm("Cancelar esta reserva?")) deleteReservation.mutate(res.id); }} className="flex-1 sm:flex-none px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-sm font-medium transition-all">Cancelar</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -437,6 +523,10 @@ export default function HomePage() {
               <input type="text" value={resForm.title} onChange={e => setResForm({...resForm, title: e.target.value})} placeholder="Ex: Sync Semanal" className={inputClasses} required />
             </div>
             <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Responsável pela Reserva</label>
+              <input type="text" value={resForm.host} onChange={e => setResForm({...resForm, host: e.target.value})} placeholder="Ex: João Silva" className={inputClasses} required />
+            </div>
+            <div>
               <div className="flex justify-between items-end mb-2 pl-1 pr-1">
                 <label className="block text-xs font-medium text-gray-400">Número de Participantes</label>
                 {(() => {
@@ -470,60 +560,54 @@ export default function HomePage() {
                 );
               })()}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Recorrência</label>
-              <select value={resForm.recurrenceType} onChange={e => setResForm({...resForm, recurrenceType: e.target.value})} className={inputClasses}>
-                <option value="none">Não repetir</option>
-                <option value="daily">Repetir diariamente</option>
-                <option value="weekly">Repetir semanalmente</option>
-              </select>
-            </div>
-            {resForm.recurrenceType !== "none" && (
-              <div className="animate-slide-in">
-                <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Por quantas vezes?</label>
-                <input type="number" min="2" max="52" value={resForm.recurrenceOccurrences} onChange={e => setResForm({...resForm, recurrenceOccurrences: e.target.value})} className={inputClasses} required />
-              </div>
+            {!resForm.id && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Recorrência</label>
+                  <select value={resForm.recurrenceType} onChange={e => setResForm({...resForm, recurrenceType: e.target.value})} className={inputClasses}>
+                    <option value="none">Não repetir</option>
+                    <option value="daily">Repetir diariamente</option>
+                    <option value="weekly">Repetir semanalmente</option>
+                  </select>
+                </div>
+                {resForm.recurrenceType !== "none" && (
+                  <div className="animate-slide-in">
+                    <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Até qual data?</label>
+                    <input type="date" min={toYMD(new Date())} value={resForm.recurrenceEndDate} onChange={e => setResForm({...resForm, recurrenceEndDate: e.target.value})} className={inputClasses} required />
+                  </div>
+                )}
+                {resForm.recurrenceType === "weekly" && (
+                  <div className="animate-slide-in">
+                    <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Dias da semana</label>
+                    <div className="flex gap-2 mt-2">
+                      {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day, idx) => (
+                        <button type="button" key={day} onClick={() => {
+                          setResForm(prev => ({
+                            ...prev, 
+                            recurrenceDays: prev.recurrenceDays.includes(idx) ? prev.recurrenceDays.filter(d => d !== idx) : [...prev.recurrenceDays, idx]
+                          }))
+                        }} className={`w-10 h-10 rounded-full text-xs font-medium transition-all ${resForm.recurrenceDays.includes(idx) ? 'bg-brand-orange text-white' : 'bg-gray-800 text-gray-400'}`}>
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="p-4 bg-brand-orange/5 border border-brand-orange/20 rounded-2xl mt-6">
+                  <p className="text-brand-orange text-sm font-medium">Sessões: {selectedSlots.length} ({selectedSlots.length} horas)</p>
+                  <p className="text-gray-400 text-xs mt-1">Data base: {selectedDate.split("-").reverse().join("/")}</p>
+                </div>
+              </>
             )}
-            
-            <div className="p-4 bg-brand-orange/5 border border-brand-orange/20 rounded-2xl mt-6">
-              <p className="text-brand-orange text-sm font-medium">Sessões: {selectedSlots.length} ({selectedSlots.length} horas)</p>
-              <p className="text-gray-400 text-xs mt-1">Data base: {selectedDate.split("-").reverse().join("/")}</p>
-            </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <button type="button" onClick={() => setActiveModal(null)} className={btnSecondary}>Voltar</button>
-              <button type="submit" disabled={createReservation.isPending} className={btnPrimary}>
-                {createReservation.isPending ? "Reservando..." : "Confirmar"}
+              <button type="submit" disabled={createReservation.isPending || editReservation.isPending} className={btnPrimary}>
+                {resForm.id ? (editReservation.isPending ? "Salvando..." : "Salvar Edição") : (createReservation.isPending ? "Reservando..." : "Confirmar")}
               </button>
             </div>
           </form>
-        </Modal>
-      )}
-
-      {activeModal === "viewReservations" && (
-        <Modal title={`Reservas do dia`} onClose={() => setActiveModal(null)}>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 base-ui-disable-scrollbar">
-            {!reservationsQuery.data?.length ? (
-              <p className="text-gray-500 text-sm text-center py-6">Nenhuma reserva confirmada para este dia.</p>
-            ) : (
-              reservationsQuery.data.map(res => {
-                const h1 = new Date(res.startTime).getUTCHours();
-                const h2 = new Date(res.endTime).getUTCHours();
-                return (
-                  <div key={res.id} className="p-4 bg-gray-900 border border-gray-800 rounded-2xl flex justify-between items-center group">
-                    <div>
-                      <h4 className="font-semibold text-gray-200 font-heading">{res.title}</h4>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {String(h1).padStart(2, '0')}:00 - {String(h2).padStart(2, '0')}:00 • {res.participants} pessoas
-                        {res.seriesId && <span className="ml-2 text-brand-orange bg-brand-orange/10 px-2 py-0.5 rounded-full border border-brand-orange/20">Recorrente</span>}
-                      </p>
-                    </div>
-                    <button onClick={() => { if(confirm("Cancelar esta reserva?")) deleteReservation.mutate(res.id); }} className="text-gray-500 group-hover:text-red-400 p-2 rounded-xl text-xs transition-all">✕</button>
-                  </div>
-                )
-              })
-            )}
-          </div>
         </Modal>
       )}
     </Fragment>

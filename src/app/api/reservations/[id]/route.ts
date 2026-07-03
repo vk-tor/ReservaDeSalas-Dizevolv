@@ -34,6 +34,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const updatedData = {
       roomId: parsed.data.roomId ?? existing.roomId,
       title: parsed.data.title ?? existing.title,
+      host: parsed.data.host ?? existing.host,
       participants: parsed.data.participants ?? existing.participants,
       startTime: parsed.data.startTime ?? existing.startTime,
       endTime: parsed.data.endTime ?? existing.endTime,
@@ -50,11 +51,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Aviso de capacidade (não-bloqueante)
-    const capacityWarning =
-      updatedData.participants > room.capacity
-        ? `Atenção: a sala "${room.name}" comporta ${room.capacity} pessoas, mas foram indicados ${updatedData.participants} participantes.`
-        : null;
+    if (updatedData.participants > room.capacity) {
+      return NextResponse.json(
+        { error: `A sala comporta no máximo ${room.capacity} pessoas.` },
+        { status: 400 }
+      );
+    }
 
     // Verificar conflito excluindo a própria reserva
     const existingReservations = await prisma.reservation.findMany({
@@ -89,10 +91,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       },
     });
 
-    return NextResponse.json({
-      ...reservation,
-      warning: capacityWarning,
-    });
+    return NextResponse.json(reservation);
   } catch (error) {
     console.error("Erro ao atualizar reserva:", error);
     return NextResponse.json(
