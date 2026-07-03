@@ -115,7 +115,7 @@ function RoomCard({ room, onClick, onDelete, onEdit }: any) {
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="relative p-[1px] rounded-[24px] cursor-pointer group h-56 transition-transform duration-300 hover:scale-[1.02] shadow-sm shadow-gray-200/50 dark:shadow-none"
+      className="relative p-[1px] rounded-[24px] cursor-pointer group min-h-[14rem] transition-all duration-300 hover:scale-[1.02] shadow-sm shadow-gray-200/50 dark:shadow-none"
     >
       {/* Borda base */}
       <div 
@@ -141,7 +141,7 @@ function RoomCard({ room, onClick, onDelete, onEdit }: any) {
           }}
         />
 
-        <div className="relative z-10">
+        <div className="relative z-10 flex flex-col flex-1">
           <div className="flex justify-between items-start mb-3">
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-heading group-hover:text-brand-orange transition-colors">{room.name}</h3>
             <div className="flex gap-2">
@@ -149,12 +149,36 @@ function RoomCard({ room, onClick, onDelete, onEdit }: any) {
               <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-100 dark:hover:bg-red-500/10 text-xs" title="Remover Sala">✕</button>
             </div>
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-sm font-medium border border-gray-100 dark:border-transparent shadow-sm dark:shadow-none">
-            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-            Lotação: {room.capacity}
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-sm font-medium border border-gray-100 dark:border-transparent shadow-sm dark:shadow-none">
+              <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+              Lotação: {room.capacity}
+            </div>
+          </div>
+
+          {/* Expanded Content */}
+          <div className="grid grid-rows-[0fr] group-hover:grid-rows-[1fr] transition-[grid-template-rows,margin-top] duration-300 ease-in-out mt-0 group-hover:mt-5">
+            <div className="overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100 flex flex-col gap-2.5">
+              <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest pl-1">Próximas Reservas</p>
+              {room.reservations?.length > 0 ? (
+                room.reservations.map((res: any) => (
+                  <div key={res.id} className="text-sm bg-gray-50 dark:bg-[#121318] rounded-xl p-3 border border-gray-100 dark:border-gray-800/80 flex justify-between items-center shadow-sm">
+                    <span className="truncate text-gray-700 dark:text-gray-300 font-medium pr-3 text-sm">{res.title}</span>
+                    <span className="text-[11px] font-bold text-brand-orange whitespace-nowrap bg-brand-orange/10 px-2 py-1 rounded-md border border-brand-orange/20">
+                      {new Date(res.startTime).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} • {String(new Date(res.startTime).getUTCHours()).padStart(2, '0')}h
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="bg-gray-50 dark:bg-[#121318] rounded-xl p-4 border border-dashed border-gray-200 dark:border-gray-800 text-center">
+                  <p className="text-sm text-gray-400 dark:text-gray-500 italic">Livre. Nenhuma reserva futura.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex justify-end relative z-10">
+        
+        <div className="flex justify-end relative z-10 mt-4">
           <span className="text-sm font-bold text-brand-orange opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">Ver sessões <span className="text-xl leading-none">→</span></span>
         </div>
       </div>
@@ -455,7 +479,7 @@ export default function HomePage() {
             </div>
 
             {roomsQuery.isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                 {[1, 2, 3].map(i => <div key={i} className="animate-pulse h-56 bg-gray-100 dark:bg-gray-900/50 rounded-3xl" />)}
               </div>
             ) : filteredRooms.length === 0 ? (
@@ -463,7 +487,7 @@ export default function HomePage() {
                 <p className="text-gray-500 dark:text-gray-500">Nenhuma sala encontrada.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                 {filteredRooms.map(room => (
                   <RoomCard 
                     key={room.id} 

@@ -10,6 +10,12 @@ export async function GET() {
         _count: {
           select: { reservations: true },
         },
+        reservations: {
+          where: { startTime: { gte: new Date() } },
+          orderBy: { startTime: 'asc' },
+          take: 3,
+          select: { id: true, title: true, startTime: true, endTime: true, participants: true }
+        }
       },
       orderBy: { name: "asc" },
     });
