@@ -68,11 +68,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Aviso de capacidade (não-bloqueante)
-    const capacityWarning =
-      participants > room.capacity
-        ? `Atenção: a sala "${room.name}" comporta ${room.capacity} pessoas, mas foram indicados ${participants} participantes.`
-        : null;
+    // Validação de capacidade (bloqueante)
+    if (participants > room.capacity) {
+      return NextResponse.json(
+        { error: `A sala comporta no máximo ${room.capacity} pessoas.` },
+        { status: 400 }
+      );
+    }
 
     // Gerar todas as sessões baseadas na recorrência
     const generatedSessions: { startTime: Date; endTime: Date }[] = [];
@@ -146,7 +148,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         reservations: created,
-        warning: capacityWarning,
       },
       { status: 201 }
     );

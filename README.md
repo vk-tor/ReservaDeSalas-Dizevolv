@@ -42,7 +42,7 @@ Durante o desenvolvimento, algumas decisões de UX e regras de negócio foram to
 
 - **Conflito que "encosta":** Reservas onde o término de uma é exatamente o início de outra (ex: termina às 14h, começa às 14h) **não são consideradas conflito**.
 - **UX Baseado em Sessões:** O fluxo foi inspirado em sites de Cinema (como a Ingresso.com). O usuário não digita datas e horas manualmente. Ele seleciona a Sala (Filme), seleciona a Data, e interage com botões visuais que representam os blocos de **1 hora** (08:00 às 20:00).
-- **Capacidade da Sala (Soft Block):** Optou-se por permitir que o usuário crie reservas com número de participantes superior à capacidade da sala, porém exibindo um *Warning* (aviso visual claro). Em reuniões reais, é comum trazer cadeiras extras; um bloqueio estrito engessaria a usabilidade.
+- **Capacidade da Sala (Hard Block):** Foi implementado um bloqueio rígido, impedindo que o usuário insira um número de participantes maior que a capacidade da sala, com um indicador visual (barra de progresso) e validação tanto no frontend quanto no backend.
 - **Design System:** As cores, tipografias e formas arredondadas (pills) foram inspiradas no site principal da [Dizevolv](https://dizevolv.com.br/).
 
 ## Pergunta de Raciocínio (Recorrência)

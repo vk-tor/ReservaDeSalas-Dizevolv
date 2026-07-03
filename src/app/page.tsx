@@ -182,8 +182,7 @@ export default function HomePage() {
       setActiveModal(null);
       setSelectedSlots([]);
       setResForm({ title: "", participants: "", recurrenceType: "none", recurrenceOccurrences: "1" });
-      if (data.warning) showToast(data.warning, "warning");
-      else showToast("Reserva concluída!", "success");
+      showToast("Reserva concluída!", "success");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -438,8 +437,38 @@ export default function HomePage() {
               <input type="text" value={resForm.title} onChange={e => setResForm({...resForm, title: e.target.value})} placeholder="Ex: Sync Semanal" className={inputClasses} required />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Número de Participantes</label>
-              <input type="number" min="1" value={resForm.participants} onChange={e => setResForm({...resForm, participants: e.target.value})} className={inputClasses} required />
+              <div className="flex justify-between items-end mb-2 pl-1 pr-1">
+                <label className="block text-xs font-medium text-gray-400">Número de Participantes</label>
+                {(() => {
+                  const room = roomsQuery.data?.find(r => r.id === selectedRoomId);
+                  const cap = room?.capacity || 1;
+                  const current = Number(resForm.participants) || 0;
+                  const pct = Math.min((current / cap) * 100, 100);
+                  const over = current > cap;
+                  return (
+                    <span className={`text-xs font-medium ${over ? "text-red-400" : "text-gray-500"}`}>
+                      {current} / {cap} max
+                    </span>
+                  );
+                })()}
+              </div>
+              <input type="number" min="1" max={roomsQuery.data?.find(r => r.id === selectedRoomId)?.capacity} value={resForm.participants} onChange={e => setResForm({...resForm, participants: e.target.value})} className={inputClasses} required />
+              
+              {(() => {
+                const room = roomsQuery.data?.find(r => r.id === selectedRoomId);
+                const cap = room?.capacity || 1;
+                const current = Number(resForm.participants) || 0;
+                const pct = Math.min((current / cap) * 100, 100);
+                const over = current > cap;
+                return (
+                  <div className="h-1.5 w-full bg-gray-800 rounded-full mt-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${over ? "bg-red-500" : "bg-brand-orange"}`} 
+                      style={{ width: `${pct}%` }}
+                    ></div>
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Recorrência</label>
