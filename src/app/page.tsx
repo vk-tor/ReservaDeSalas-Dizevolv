@@ -71,7 +71,7 @@ const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSta
 
 // ─── Components ──────────────────────────────────────────────────────────────
 
-function Toast({ message, type, onClose }: any) {
+function Toast({ message, type, onClose }: { message: string, type: "success" | "error" | "warning", onClose: () => void }) {
   const colors = {
     success: "bg-green-50 dark:bg-brand-orange/10 border-green-200 dark:border-brand-orange/40 text-green-700 dark:text-brand-orange",
     error: "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/40 text-red-600 dark:text-red-300",
@@ -89,7 +89,18 @@ function Modal({ title, children, onClose }: any) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-50 w-full max-w-lg mx-4 bg-white dark:bg-[#09090b] border border-gray-200 dark:border-gray-800 rounded-3xl shadow-2xl animate-modal-in overflow-hiddenfunction RoomCard({ room, onClick, onDelete }: any) {
+      <div className="relative z-50 w-full max-w-lg mx-4 bg-white dark:bg-[#09090b] border border-gray-200 dark:border-gray-800 rounded-3xl shadow-2xl animate-modal-in overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800/60 bg-gray-50 dark:bg-gray-900/20">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 font-heading">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-xl leading-none transition-colors">×</button>
+        </div>
+        <div className="px-6 py-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function RoomCard({ room, onClick, onDelete }: any) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
 
@@ -146,6 +157,7 @@ function Modal({ title, children, onClose }: any) {
       </div>
     </div>
   );
+}
 
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
