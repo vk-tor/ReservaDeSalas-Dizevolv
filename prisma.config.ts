@@ -7,10 +7,5 @@ export default defineConfig({
   datasource: {
     url: env('DIRECT_URL'),
   },
-  migrate: {
-    async url() {
-      return process.env.DIRECT_URL!
-    },
-  },
 })
 
