@@ -72,6 +72,7 @@ export const updateReservationSchema = z
     endTime: z.coerce
       .date({ error: "O horário de término é obrigatório." })
       .optional(),
+    applyToSeries: z.boolean().optional(),
   })
   .refine(
     (data) => {

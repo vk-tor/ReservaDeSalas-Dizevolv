@@ -1,14 +1,24 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
-  --color-background: #0F1014; /* Deep dark background */
-  --color-foreground: #f3f4f6;
   --color-brand-orange: #FF6B2B;
   --font-sans: var(--font-dm-sans);
   --font-heading: var(--font-archivo);
 
   --animate-slide-in: slide-in 0.3s ease-out;
   --animate-modal-in: modal-in 0.2s ease-out;
+}
+
+:root {
+  --color-background: #f9fafb;
+  --color-foreground: #111827;
+}
+
+.dark {
+  --color-background: #0F1014;
+  --color-foreground: #f3f4f6;
 }
 
 @keyframes slide-in {

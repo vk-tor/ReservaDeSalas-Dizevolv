@@ -83,13 +83,31 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       );
     }
 
-    const reservation = await prisma.reservation.update({
-      where: { id },
-      data: updatedData,
-      include: {
-        room: { select: { name: true, capacity: true } },
-      },
-    });
+    let reservation;
+    if (parsed.data.applyToSeries && existing.seriesId) {
+      // Atualizar todas as instâncias dessa série
+      await prisma.reservation.updateMany({
+        where: { seriesId: existing.seriesId },
+        data: {
+          title: updatedData.title,
+          host: updatedData.host,
+          participants: updatedData.participants,
+        },
+      });
+      // Retornar a própria reserva editada
+      reservation = await prisma.reservation.findUnique({
+        where: { id },
+        include: { room: { select: { name: true, capacity: true } } },
+      });
+    } else {
+      reservation = await prisma.reservation.update({
+        where: { id },
+        data: updatedData,
+        include: {
+          room: { select: { name: true, capacity: true } },
+        },
+      });
+    }
 
     return NextResponse.json(reservation);
   } catch (error) {
