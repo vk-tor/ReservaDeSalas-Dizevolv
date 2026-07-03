@@ -100,7 +100,7 @@ function Modal({ title, children, onClose }: any) {
   );
 }
 
-function RoomCard({ room, onClick, onDelete }: any) {
+function RoomCard({ room, onClick, onDelete, onEdit }: any) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
 
@@ -144,7 +144,10 @@ function RoomCard({ room, onClick, onDelete }: any) {
         <div className="relative z-10">
           <div className="flex justify-between items-start mb-3">
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-heading group-hover:text-brand-orange transition-colors">{room.name}</h3>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-100 dark:hover:bg-red-500/10 text-xs">✕</button>
+            <div className="flex gap-2">
+              <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-brand-orange transition-all rounded-full hover:bg-brand-orange/10 text-xs" title="Editar Sala">✎</button>
+              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-100 dark:hover:bg-red-500/10 text-xs" title="Remover Sala">✕</button>
+            </div>
           </div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-sm font-medium border border-gray-100 dark:border-transparent shadow-sm dark:shadow-none">
             <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
@@ -194,7 +197,7 @@ export default function HomePage() {
   }, [theme]);
 
   // Forms
-  const [roomForm, setRoomForm] = useState({ name: "", capacity: "" });
+  const [roomForm, setRoomForm] = useState({ id: "", name: "", capacity: "" });
   const [resForm, setResForm] = useState({ id: "", title: "", host: "", participants: "", recurrenceType: "none", recurrenceEndDate: "", recurrenceDays: [] as number[], seriesId: "", applyToSeries: false });
 
   const nextDays = useMemo(() => generateNextDays(14), []);
@@ -246,6 +249,21 @@ export default function HomePage() {
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
       setSelectedRoomId("");
       showToast("Sala removida!", "success");
+    },
+    onError: (err: Error) => showToast(err.message, "error"),
+  });
+
+  const editRoom = useMutation({
+    mutationFn: async (data: { id: string; name: string; capacity: number }) => {
+      const res = await fetch(`/api/rooms/${data.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: data.name, capacity: data.capacity }) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao editar sala");
+      return json;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      setActiveModal(null);
+      showToast("Sala editada com sucesso!", "success");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -397,7 +415,7 @@ export default function HomePage() {
             <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
-            <button onClick={() => { setRoomForm({name:"", capacity:""}); setActiveModal("createRoom"); }} className={btnSecondary}>
+            <button onClick={() => { setRoomForm({id:"", name:"", capacity:""}); setActiveModal("createRoom"); }} className={btnSecondary}>
               + Nova Sala
             </button>
           </div>
@@ -452,6 +470,7 @@ export default function HomePage() {
                     room={room} 
                     onClick={() => { setSelectedRoomId(room.id); setSelectedSlots([]); }} 
                     onDelete={() => { if(confirm(`Remover sala ${room.name}?`)) deleteRoom.mutate(room.id); }} 
+                    onEdit={() => { setRoomForm({ id: room.id, name: room.name, capacity: String(room.capacity) }); setActiveModal("createRoom"); }}
                   />
                 ))}
               </div>
@@ -654,19 +673,26 @@ export default function HomePage() {
 
       {/* Modals */}
       {activeModal === "createRoom" && (
-        <Modal title="Nova Sala" onClose={() => setActiveModal(null)}>
-          <form onSubmit={e => { e.preventDefault(); createRoom.mutate({ name: roomForm.name, capacity: Number(roomForm.capacity) }); }} className="space-y-5">
+        <Modal title={roomForm.id ? "Editar Sala" : "Nova Sala"} onClose={() => setActiveModal(null)}>
+          <form onSubmit={e => {
+            e.preventDefault();
+            if (roomForm.id) {
+              editRoom.mutate({ id: roomForm.id, name: roomForm.name, capacity: Number(roomForm.capacity) });
+            } else {
+              createRoom.mutate({ name: roomForm.name, capacity: Number(roomForm.capacity) });
+            }
+          }} className="space-y-5">
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 pl-1">Nome da Sala</label>
               <input type="text" value={roomForm.name} onChange={e => setRoomForm({...roomForm, name: e.target.value})} className={inputClasses} required />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2 pl-1">Capacidade</label>
-              <input type="number" value={roomForm.capacity} onChange={e => setRoomForm({...roomForm, capacity: e.target.value})} className={inputClasses} required />
+              <input type="number" min="1" value={roomForm.capacity} onChange={e => setRoomForm({...roomForm, capacity: e.target.value})} className={inputClasses} required />
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <button type="button" onClick={() => setActiveModal(null)} className={btnSecondary}>Cancelar</button>
-              <button type="submit" disabled={createRoom.isPending} className={btnPrimary}>Salvar</button>
+              <button type="submit" disabled={createRoom.isPending || editRoom.isPending} className={btnPrimary}>Salvar</button>
             </div>
           </form>
         </Modal>

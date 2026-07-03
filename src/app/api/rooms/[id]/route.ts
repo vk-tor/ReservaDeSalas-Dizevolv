@@ -20,6 +20,22 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       );
     }
 
+    if (parsed.data.capacity !== undefined) {
+      const maxParticipantsResult = await prisma.reservation.aggregate({
+        where: { roomId: id },
+        _max: { participants: true },
+      });
+
+      const maxParticipants = maxParticipantsResult._max.participants || 0;
+
+      if (parsed.data.capacity < maxParticipants) {
+        return NextResponse.json(
+          { error: `A capacidade não pode ser menor que a maior reserva existente (${maxParticipants} participantes).` },
+          { status: 400 }
+        );
+      }
+    }
+
     const room = await prisma.room.update({
       where: { id },
       data: parsed.data,
