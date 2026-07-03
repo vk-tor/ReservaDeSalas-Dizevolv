@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/reservations — Cria uma nova reserva com validação de conflito no servidor
+// POST /api/reservations — Cria uma ou mais reservas com validação de conflito no servidor
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { roomId, title, participants, startTime, endTime } = parsed.data;
+    const { roomId, title, participants, sessions, recurrence } = parsed.data;
 
     // Verificar se a sala existe e obter capacidade
     const room = await prisma.room.findUnique({ where: { id: roomId } });
@@ -74,41 +74,78 @@ export async function POST(request: Request) {
         ? `Atenção: a sala "${room.name}" comporta ${room.capacity} pessoas, mas foram indicados ${participants} participantes.`
         : null;
 
+    // Gerar todas as sessões baseadas na recorrência
+    const generatedSessions: { startTime: Date; endTime: Date }[] = [];
+    const occurrences = recurrence?.occurrences ?? 1;
+    const type = recurrence?.type ?? "none";
+    
+    for (let i = 0; i < occurrences; i++) {
+      for (const session of sessions) {
+        const start = new Date(session.startTime);
+        const end = new Date(session.endTime);
+        
+        if (type === "daily") {
+          start.setDate(start.getDate() + i);
+          end.setDate(end.getDate() + i);
+        } else if (type === "weekly") {
+          start.setDate(start.getDate() + (i * 7));
+          end.setDate(end.getDate() + (i * 7));
+        }
+        
+        generatedSessions.push({ startTime: start, endTime: end });
+      }
+    }
+
+    // Calcular bounding box de tempo para otimizar busca no DB
+    const minStart = new Date(Math.min(...generatedSessions.map(s => s.startTime.getTime())));
+    const maxEnd = new Date(Math.max(...generatedSessions.map(s => s.endTime.getTime())));
+
     // Buscar reservas existentes da mesma sala que possam conflitar
     const existingReservations = await prisma.reservation.findMany({
       where: {
         roomId,
-        startTime: { lt: endTime },
-        endTime: { gt: startTime },
+        startTime: { lt: maxEnd },
+        endTime: { gt: minStart },
       },
     });
 
-    // Verificar conflito usando a função pura
-    const conflict = findConflict(existingReservations, {
-      startTime,
-      endTime,
-    });
-
-    if (conflict) {
-      return NextResponse.json(
-        {
-          error: `Conflito de horário: já existe uma reserva nesta sala entre ${conflict.startTime.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} e ${conflict.endTime.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`,
-        },
-        { status: 409 }
-      );
+    // Validar conflitos para cada sessão gerada
+    for (const session of generatedSessions) {
+      const conflict = findConflict(existingReservations, session);
+      if (conflict) {
+        return NextResponse.json(
+          {
+            error: `Conflito de horário: já existe uma reserva nesta sala em ${session.startTime.toLocaleDateString("pt-BR")} entre ${conflict.startTime.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} e ${conflict.endTime.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`,
+          },
+          { status: 409 }
+        );
+      }
     }
 
-    // Criar a reserva
-    const reservation = await prisma.reservation.create({
-      data: { roomId, title, participants, startTime, endTime },
-      include: {
-        room: { select: { name: true, capacity: true } },
-      },
-    });
+    // Criar todas as reservas no banco em uma transação
+    // const seriesId = generatedSessions.length > 1 ? randomUUID() : null; // crypto needed
+    // Workaround since crypto is not imported, let's use a timestamp+random string
+    const seriesId = generatedSessions.length > 1 ? `series_${Date.now()}_${Math.floor(Math.random() * 1000)}` : null;
+    
+    const created = await prisma.$transaction(
+      generatedSessions.map((session) => 
+        prisma.reservation.create({
+          data: {
+            roomId,
+            title,
+            participants,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            seriesId
+          },
+          include: { room: { select: { name: true, capacity: true } } }
+        })
+      )
+    );
 
     return NextResponse.json(
       {
-        ...reservation,
+        reservations: created,
         warning: capacityWarning,
       },
       { status: 201 }

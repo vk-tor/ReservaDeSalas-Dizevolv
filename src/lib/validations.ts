@@ -20,6 +20,16 @@ export type UpdateRoomInput = z.infer<typeof updateRoomSchema>;
 
 // ─── Reservation Schemas ─────────────────────────────────────────────────────
 
+const timeSlotSchema = z
+  .object({
+    startTime: z.coerce.date({ error: "O horário de início é obrigatório." }),
+    endTime: z.coerce.date({ error: "O horário de término é obrigatório." }),
+  })
+  .refine((data) => data.endTime > data.startTime, {
+    message: "O horário de término deve ser posterior ao horário de início.",
+    path: ["endTime"],
+  });
+
 export const createReservationSchema = z
   .object({
     roomId: z.string().min(1, "A sala é obrigatória."),
@@ -31,16 +41,13 @@ export const createReservationSchema = z
       .number()
       .int("O número de participantes deve ser inteiro.")
       .min(1, "Deve haver ao menos 1 participante."),
-    startTime: z.coerce.date({
-      error: "O horário de início é obrigatório.",
-    }),
-    endTime: z.coerce.date({
-      error: "O horário de término é obrigatório.",
-    }),
-  })
-  .refine((data) => data.endTime > data.startTime, {
-    message: "O horário de término deve ser posterior ao horário de início.",
-    path: ["endTime"],
+    sessions: z.array(timeSlotSchema).min(1, "Selecione ao menos um horário."),
+    recurrence: z
+      .object({
+        type: z.enum(["none", "daily", "weekly"]),
+        occurrences: z.number().int().min(1).max(52), // Max 1 ano de semanas
+      })
+      .optional(),
   });
 
 export const updateReservationSchema = z

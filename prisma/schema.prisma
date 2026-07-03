@@ -28,6 +28,7 @@ model Reservation {
   startTime    DateTime
   endTime      DateTime
   createdAt    DateTime @default(now())
+  seriesId     String?  @map("series_id") // ID de agrupamento para recorrências
 
   @@index([roomId, startTime, endTime])
   @@map("reservations")

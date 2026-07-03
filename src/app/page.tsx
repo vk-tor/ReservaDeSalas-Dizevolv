@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, Fragment } from "react";
+import { useState, Fragment, useMemo, useEffect } from "react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ interface Reservation {
   participants: number;
   startTime: string;
   endTime: string;
-  createdAt: string;
+  seriesId?: string | null;
   room?: { name: string; capacity: number };
   warning?: string | null;
 }
@@ -27,9 +27,8 @@ interface Reservation {
 type ModalType =
   | null
   | "createRoom"
-  | "editRoom"
   | "createReservation"
-  | "editReservation";
+  | "viewReservations";
 
 // ─── API Helpers ─────────────────────────────────────────────────────────────
 
@@ -53,153 +52,49 @@ async function fetchReservations(
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
-function getStatus(
-  startTime: string,
-  endTime: string
-): { label: string; color: string } {
-  const now = new Date();
-  const start = new Date(startTime);
-  const end = new Date(endTime);
-  if (now >= start && now <= end)
-    return {
-      label: "Em andamento",
-      color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-    };
-  if (now < start)
-    return {
-      label: "Próxima",
-      color: "bg-sky-500/20 text-sky-400 border-sky-500/30",
-    };
-  return {
-    label: "Encerrada",
-    color: "bg-gray-500/20 text-gray-400 border-gray-500/30",
-  };
+function generateNextDays(count: number = 14): Date[] {
+  const days: Date[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < count; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+  return days;
 }
 
-function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const formatDayName = (d: Date) => d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+const formatDayNumber = (d: Date) => d.getDate().toString().padStart(2, "0");
+const formatMonthName = (d: Date) => d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+// ─── Components ──────────────────────────────────────────────────────────────
 
-function toLocalDatetimeInput(dateStr?: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  const offset = d.getTimezoneOffset();
-  const local = new Date(d.getTime() - offset * 60 * 1000);
-  return local.toISOString().slice(0, 16);
-}
-
-// ─── Toast ───────────────────────────────────────────────────────────────────
-
-function Toast({
-  message,
-  type,
-  onClose,
-}: {
-  message: string;
-  type: "success" | "error" | "warning";
-  onClose: () => void;
-}) {
+function Toast({ message, type, onClose }: any) {
   const colors = {
     success: "bg-emerald-500/10 border-emerald-500/40 text-emerald-300",
     error: "bg-red-500/10 border-red-500/40 text-red-300",
     warning: "bg-amber-500/10 border-amber-500/40 text-amber-300",
   };
   return (
-    <div
-      className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl border backdrop-blur-md shadow-2xl animate-slide-in flex items-center gap-3 ${colors[type]}`}
-    >
+    <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-2xl border backdrop-blur-md shadow-2xl animate-slide-in flex items-center gap-3 ${colors[type]}`}>
       <span className="text-sm font-medium">{message}</span>
-      <button
-        onClick={onClose}
-        className="ml-2 opacity-60 hover:opacity-100 text-lg leading-none"
-      >
-        ×
-      </button>
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100 text-lg leading-none">×</button>
     </div>
   );
 }
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
-
-function Skeleton({ className = "" }: { className?: string }) {
-  return (
-    <div
-      className={`animate-pulse rounded-lg bg-gray-800/60 ${className}`}
-    />
-  );
-}
-
-function ReservationSkeleton() {
-  return (
-    <div className="p-5 rounded-2xl bg-gray-900/50 border border-gray-800/50 space-y-3">
-      <Skeleton className="h-5 w-3/4" />
-      <Skeleton className="h-4 w-1/2" />
-      <Skeleton className="h-4 w-1/3" />
-    </div>
-  );
-}
-
-// ─── Empty State ─────────────────────────────────────────────────────────────
-
-function EmptyState({
-  icon,
-  title,
-  description,
-}: {
-  icon: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <span className="text-5xl mb-4">{icon}</span>
-      <h3 className="text-lg font-semibold text-gray-300">{title}</h3>
-      <p className="text-sm text-gray-500 mt-1 max-w-xs">{description}</p>
-    </div>
-  );
-}
-
-// ─── Modal ───────────────────────────────────────────────────────────────────
-
-function Modal({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
+function Modal({ title, children, onClose }: any) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative z-50 w-full max-w-lg mx-4 bg-gray-900 border border-gray-700/50 rounded-2xl shadow-2xl animate-modal-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-50 w-full max-w-lg mx-4 bg-[#09090b] border border-gray-800 rounded-3xl shadow-2xl animate-modal-in overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-800/60 bg-gray-900/20">
           <h2 className="text-lg font-semibold text-gray-100">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-300 text-xl leading-none transition-colors"
-          >
-            ×
-          </button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-xl leading-none transition-colors">×</button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-6">{children}</div>
       </div>
     </div>
   );
@@ -212,55 +107,42 @@ export default function HomePage() {
 
   // State
   const [activeModal, setActiveModal] = useState<ModalType>(null);
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
-  const [selectedReservation, setSelectedReservation] =
-    useState<Reservation | null>(null);
-  const [filterRoomId, setFilterRoomId] = useState<string>("");
-  const [filterDate, setFilterDate] = useState<string>("");
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "success" | "error" | "warning";
-  } | null>(null);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<string>(toYMD(new Date()));
+  const [selectedSlots, setSelectedSlots] = useState<number[]>([]); 
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "warning" } | null>(null);
 
-  // Form state
+  // Forms
   const [roomForm, setRoomForm] = useState({ name: "", capacity: "" });
-  const [resForm, setResForm] = useState({
-    roomId: "",
-    title: "",
-    participants: "",
-    startTime: "",
-    endTime: "",
-  });
+  const [resForm, setResForm] = useState({ title: "", participants: "", recurrenceType: "none", recurrenceOccurrences: "1" });
+
+  const nextDays = useMemo(() => generateNextDays(14), []);
+  const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8:00 to 19:00
 
   // Queries
-  const roomsQuery = useQuery({
-    queryKey: ["rooms"],
-    queryFn: fetchRooms,
-  });
+  const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: fetchRooms });
+  
+  useEffect(() => {
+    if (roomsQuery.data && roomsQuery.data.length > 0 && !selectedRoomId) {
+      setSelectedRoomId(roomsQuery.data[0].id);
+    }
+  }, [roomsQuery.data, selectedRoomId]);
 
   const reservationsQuery = useQuery({
-    queryKey: ["reservations", filterRoomId, filterDate],
-    queryFn: () => fetchReservations(filterRoomId || undefined, filterDate || undefined),
+    queryKey: ["reservations", selectedRoomId, selectedDate],
+    queryFn: () => fetchReservations(selectedRoomId, selectedDate),
+    enabled: !!selectedRoomId,
   });
 
-  // Show toast helper
-  const showToast = (
-    message: string,
-    type: "success" | "error" | "warning"
-  ) => {
+  const showToast = (message: string, type: "success" | "error" | "warning") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
 
-  // ─── Mutations ───────────────────────────────────────────────────────────
-
+  // Mutations
   const createRoom = useMutation({
     mutationFn: async (data: { name: string; capacity: number }) => {
-      const res = await fetch("/api/rooms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      const res = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Erro ao criar sala");
       return json;
@@ -268,34 +150,7 @@ export default function HomePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
       setActiveModal(null);
-      setRoomForm({ name: "", capacity: "" });
       showToast("Sala criada com sucesso!", "success");
-    },
-    onError: (err: Error) => showToast(err.message, "error"),
-  });
-
-  const updateRoom = useMutation({
-    mutationFn: async ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: { name?: string; capacity?: number };
-    }) => {
-      const res = await fetch(`/api/rooms/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Erro ao atualizar sala");
-      return json;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rooms"] });
-      setActiveModal(null);
-      setSelectedRoom(null);
-      showToast("Sala atualizada!", "success");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -309,75 +164,26 @@ export default function HomePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
-      queryClient.invalidateQueries({ queryKey: ["reservations"] });
+      setSelectedRoomId("");
       showToast("Sala removida!", "success");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
 
   const createReservation = useMutation({
-    mutationFn: async (data: {
-      roomId: string;
-      title: string;
-      participants: number;
-      startTime: string;
-      endTime: string;
-    }) => {
-      const res = await fetch("/api/reservations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+    mutationFn: async (data: any) => {
+      const res = await fetch("/api/reservations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Erro ao criar reserva");
-      return json as Reservation;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["reservations"] });
-      queryClient.invalidateQueries({ queryKey: ["rooms"] });
-      setActiveModal(null);
-      setResForm({
-        roomId: "",
-        title: "",
-        participants: "",
-        startTime: "",
-        endTime: "",
-      });
-      if (data.warning) {
-        showToast(data.warning, "warning");
-      } else {
-        showToast("Reserva criada com sucesso!", "success");
-      }
-    },
-    onError: (err: Error) => showToast(err.message, "error"),
-  });
-
-  const updateReservation = useMutation({
-    mutationFn: async ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: Record<string, unknown>;
-    }) => {
-      const res = await fetch(`/api/reservations/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Erro ao atualizar reserva");
-      return json as Reservation;
+      return json;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["reservations"] });
       setActiveModal(null);
-      setSelectedReservation(null);
-      if (data.warning) {
-        showToast(data.warning, "warning");
-      } else {
-        showToast("Reserva atualizada!", "success");
-      }
+      setSelectedSlots([]);
+      setResForm({ title: "", participants: "", recurrenceType: "none", recurrenceOccurrences: "1" });
+      if (data.warning) showToast(data.warning, "warning");
+      else showToast("Reserva concluída!", "success");
     },
     onError: (err: Error) => showToast(err.message, "error"),
   });
@@ -391,556 +197,306 @@ export default function HomePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reservations"] });
-      queryClient.invalidateQueries({ queryKey: ["rooms"] });
-      showToast("Reserva removida!", "success");
+      showToast("Reserva cancelada!", "success");
     },
-    onError: (err: Error) => showToast(err.message, "error"),
   });
 
-  // ─── Modal Handlers ─────────────────────────────────────────────────────
+  // Slot Logic
+  const getSlotStatus = (hour: number) => {
+    if (!reservationsQuery.data) return "free";
+    
+    // Convert slot local hour to UTC equivalent for database comparison
+    // Assuming backend also stored it as local time but parsed as UTC
+    const slotStartStr = `${selectedDate}T${String(hour).padStart(2, "0")}:00:00.000Z`;
+    const slotEndStr = `${selectedDate}T${String(hour + 1).padStart(2, "0")}:00:00.000Z`;
 
-  const openCreateRoom = () => {
-    setRoomForm({ name: "", capacity: "" });
-    setActiveModal("createRoom");
+    for (const res of reservationsQuery.data) {
+      if (slotStartStr < res.endTime && slotEndStr > res.startTime) {
+        return "booked";
+      }
+    }
+    
+    if (selectedSlots.includes(hour)) return "selected";
+    return "free";
   };
 
-  const openEditRoom = (room: Room) => {
-    setSelectedRoom(room);
-    setRoomForm({ name: room.name, capacity: String(room.capacity) });
-    setActiveModal("editRoom");
+  const toggleSlot = (hour: number) => {
+    if (getSlotStatus(hour) === "booked") return;
+    setSelectedSlots(prev => 
+      prev.includes(hour) ? prev.filter(h => h !== hour) : [...prev, hour]
+    );
   };
 
-  const openCreateReservation = () => {
-    setResForm({
-      roomId: filterRoomId || "",
-      title: "",
-      participants: "",
-      startTime: "",
-      endTime: "",
-    });
+  const handleBook = () => {
+    if (selectedSlots.length === 0) return;
     setActiveModal("createReservation");
   };
 
-  const openEditReservation = (reservation: Reservation) => {
-    setSelectedReservation(reservation);
-    setResForm({
-      roomId: reservation.roomId,
-      title: reservation.title,
-      participants: String(reservation.participants),
-      startTime: toLocalDatetimeInput(reservation.startTime),
-      endTime: toLocalDatetimeInput(reservation.endTime),
+  const submitReservation = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const sorted = [...selectedSlots].sort((a, b) => a - b);
+    const sessions = [];
+    
+    let currentStart = sorted[0];
+    let currentEnd = sorted[0] + 1;
+    
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i] === currentEnd) {
+        currentEnd = sorted[i] + 1;
+      } else {
+        const st = new Date(`${selectedDate}T${String(currentStart).padStart(2, "0")}:00:00.000Z`);
+        const en = new Date(`${selectedDate}T${String(currentEnd).padStart(2, "0")}:00:00.000Z`);
+        sessions.push({ startTime: st.toISOString(), endTime: en.toISOString() });
+        currentStart = sorted[i];
+        currentEnd = sorted[i] + 1;
+      }
+    }
+    
+    const st = new Date(`${selectedDate}T${String(currentStart).padStart(2, "0")}:00:00.000Z`);
+    const en = new Date(`${selectedDate}T${String(currentEnd).padStart(2, "0")}:00:00.000Z`);
+    sessions.push({ startTime: st.toISOString(), endTime: en.toISOString() });
+
+    createReservation.mutate({
+      roomId: selectedRoomId,
+      title: resForm.title,
+      participants: Number(resForm.participants),
+      sessions,
+      recurrence: {
+        type: resForm.recurrenceType,
+        occurrences: Number(resForm.recurrenceOccurrences)
+      }
     });
-    setActiveModal("editReservation");
   };
 
-  // ─── Render ──────────────────────────────────────────────────────────────
-
-  const inputClasses =
-    "w-full px-4 py-2.5 rounded-xl bg-gray-800/60 border border-gray-700/50 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all text-sm";
-
-  const buttonPrimary =
-    "px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium text-sm shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
-
-  const buttonSecondary =
-    "px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm border border-gray-700/50 transition-all";
-
-  const buttonDanger =
-    "px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs border border-red-500/20 transition-all";
+  // Styles
+  const inputClasses = "w-full px-4 py-3 rounded-2xl bg-[#09090b] border border-gray-800 text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all text-sm";
+  const btnPill = "px-6 py-2.5 rounded-full font-medium text-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
+  const btnPrimary = `${btnPill} bg-emerald-500 hover:bg-emerald-400 text-gray-950 shadow-lg shadow-emerald-500/20`;
+  const btnSecondary = `${btnPill} bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-800`;
 
   return (
     <Fragment>
-      {/* Toast */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-
-      {/* Header */}
-      <header className="border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-xl sticky top-0 z-30">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
+      <header className="border-b border-gray-800/60 bg-[#09090b]/80 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
-              <span className="text-white text-lg">📅</span>
+            <div className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <span className="text-gray-950 font-bold text-xl">D</span>
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight">
-                Reserva de Salas
-              </h1>
-              <p className="text-xs text-gray-500">
-                Sistema de agendamento de reuniões
-              </p>
+              <h1 className="text-lg font-bold tracking-tight text-gray-100">Dizevolv Rooms</h1>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={openCreateRoom} className={buttonSecondary}>
-              + Nova Sala
-            </button>
-            <button onClick={openCreateReservation} className={buttonPrimary}>
-              + Nova Reserva
-            </button>
-          </div>
+          <button onClick={() => { setRoomForm({name:"", capacity:""}); setActiveModal("createRoom"); }} className={btnSecondary}>
+            + Nova Sala
+          </button>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* ── Sidebar: Salas ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          
           <aside className="lg:col-span-3 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                Salas
-              </h2>
-              {roomsQuery.data && (
-                <span className="text-xs text-gray-600">
-                  {roomsQuery.data.length} sala
-                  {roomsQuery.data.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-
-            {roomsQuery.isLoading && (
-              <div className="space-y-3">
-                <Skeleton className="h-20" />
-                <Skeleton className="h-20" />
-                <Skeleton className="h-20" />
-              </div>
-            )}
-
-            {roomsQuery.data?.length === 0 && (
-              <EmptyState
-                icon="🏢"
-                title="Nenhuma sala"
-                description="Cadastre a primeira sala para começar."
-              />
-            )}
-
-            {roomsQuery.data?.map((room) => (
-              <div
-                key={room.id}
-                className={`group p-4 rounded-2xl border transition-all cursor-pointer ${
-                  filterRoomId === room.id
-                    ? "bg-violet-500/10 border-violet-500/30 shadow-lg shadow-violet-500/5"
-                    : "bg-gray-900/40 border-gray-800/50 hover:bg-gray-900/70 hover:border-gray-700/50"
-                }`}
-                onClick={() =>
-                  setFilterRoomId(filterRoomId === room.id ? "" : room.id)
-                }
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-200 text-sm">
-                      {room.name}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {room.capacity} pessoa{room.capacity !== 1 ? "s" : ""} ·{" "}
-                      {room._count?.reservations ?? 0} reserva
-                      {(room._count?.reservations ?? 0) !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditRoom(room);
-                      }}
-                      className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-500 text-xs"
-                      title="Editar"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (
-                          confirm(
-                            `Remover a sala "${room.name}"? Todas as reservas dela serão excluídas.`
-                          )
-                        )
-                          deleteRoom.mutate(room.id);
-                      }}
-                      className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-500 text-xs"
-                      title="Remover"
-                    >
-                      🗑️
-                    </button>
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">Escolha a Sala</h2>
+            
+            {roomsQuery.isLoading && <div className="space-y-3"><div className="animate-pulse h-16 bg-gray-900 rounded-2xl" /></div>}
+            
+            <div className="space-y-3">
+              {roomsQuery.data?.map(room => (
+                <div 
+                  key={room.id}
+                  onClick={() => { setSelectedRoomId(room.id); setSelectedSlots([]); }}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer group ${
+                    selectedRoomId === room.id 
+                      ? "bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5" 
+                      : "bg-gray-900/30 border-gray-800 hover:bg-gray-900 hover:border-gray-700"
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className={`font-semibold text-sm ${selectedRoomId === room.id ? "text-emerald-400" : "text-gray-200"}`}>{room.name}</h3>
+                      <p className="text-xs text-gray-500 mt-1">Capacidade: {room.capacity} pessoas</p>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); if(confirm(`Remover sala ${room.name}?`)) deleteRoom.mutate(room.id); }} className="opacity-0 group-hover:opacity-100 p-2 text-gray-600 hover:text-red-400 transition-all rounded-full hover:bg-red-500/10 text-xs">🗑</button>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </aside>
 
-          {/* ── Main: Reservas ── */}
-          <section className="lg:col-span-9 space-y-6">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 items-center">
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Filtrar por sala
-                </label>
-                <select
-                  value={filterRoomId}
-                  onChange={(e) => setFilterRoomId(e.target.value)}
-                  className={inputClasses}
-                >
-                  <option value="">Todas as salas</option>
-                  {roomsQuery.data?.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.name}
-                    </option>
-                  ))}
-                </select>
+          <section className="lg:col-span-9">
+            {!selectedRoomId ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-gray-800 rounded-3xl">
+                <span className="text-4xl mb-4 opacity-50">🍿</span>
+                <p className="text-gray-400">Selecione uma sala ao lado para ver as sessões.</p>
               </div>
-              <div className="min-w-[180px]">
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Filtrar por data
-                </label>
-                <input
-                  type="date"
-                  value={filterDate}
-                  onChange={(e) => setFilterDate(e.target.value)}
-                  className={inputClasses}
-                />
-              </div>
-              {(filterRoomId || filterDate) && (
-                <button
-                  onClick={() => {
-                    setFilterRoomId("");
-                    setFilterDate("");
-                  }}
-                  className="self-end px-3 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  Limpar filtros
-                </button>
-              )}
-            </div>
-
-            {/* Reservation List */}
-            {reservationsQuery.isLoading && (
-              <div className="space-y-4">
-                <ReservationSkeleton />
-                <ReservationSkeleton />
-                <ReservationSkeleton />
-              </div>
-            )}
-
-            {reservationsQuery.data?.length === 0 && !reservationsQuery.isLoading && (
-              <EmptyState
-                icon="📋"
-                title="Nenhuma reserva encontrada"
-                description={
-                  filterRoomId || filterDate
-                    ? "Tente alterar os filtros para ver mais resultados."
-                    : "Crie a primeira reserva clicando no botão acima."
-                }
-              />
-            )}
-
-            <div className="space-y-4">
-              {reservationsQuery.data?.map((reservation) => {
-                const status = getStatus(
-                  reservation.startTime,
-                  reservation.endTime
-                );
-                return (
-                  <div
-                    key={reservation.id}
-                    className="group p-5 rounded-2xl bg-gray-900/40 border border-gray-800/50 hover:bg-gray-900/70 hover:border-gray-700/50 transition-all"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-2 flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-gray-200">
-                            {reservation.title}
-                          </h3>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${status.color}`}
-                          >
-                            {status.label}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
-                          <span>
-                            🏢 {reservation.room?.name ?? "—"}
-                          </span>
-                          <span>
-                            👥 {reservation.participants} participante
-                            {reservation.participants !== 1 ? "s" : ""}
-                            {reservation.room &&
-                              reservation.participants >
-                                reservation.room.capacity && (
-                                <span className="text-amber-400 ml-1">
-                                  (excede capacidade de{" "}
-                                  {reservation.room.capacity})
-                                </span>
-                              )}
-                          </span>
-                          <span>
-                            🕐 {formatTime(reservation.startTime)} –{" "}
-                            {formatTime(reservation.endTime)}
-                          </span>
-                          <span>
-                            📅{" "}
-                            {formatDateTime(reservation.startTime).split(",")[0]}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-4">
-                        <button
-                          onClick={() => openEditReservation(reservation)}
-                          className={buttonSecondary + " !px-3 !py-1.5 !text-xs"}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Remover a reserva "${reservation.title}"?`
-                              )
-                            )
-                              deleteReservation.mutate(reservation.id);
-                          }}
-                          className={buttonDanger}
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    </div>
+            ) : (
+              <div className="space-y-8 animate-slide-in">
+                
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-100">Sessões</h2>
+                    <button onClick={() => setActiveModal("viewReservations")} className="text-sm text-emerald-500 hover:text-emerald-400 font-medium">Ver reservas deste dia</button>
                   </div>
-                );
-              })}
-            </div>
+                  
+                  <div className="flex gap-3 overflow-x-auto pb-4 base-ui-disable-scrollbar">
+                    {nextDays.map(d => {
+                      const ymd = toYMD(d);
+                      const isSelected = selectedDate === ymd;
+                      return (
+                        <button
+                          key={ymd}
+                          onClick={() => { setSelectedDate(ymd); setSelectedSlots([]); }}
+                          className={`shrink-0 flex flex-col items-center justify-center w-20 h-24 rounded-3xl border transition-all ${
+                            isSelected 
+                              ? "bg-emerald-500 text-gray-950 border-emerald-400 shadow-xl shadow-emerald-500/20" 
+                              : "bg-gray-900/50 text-gray-400 border-gray-800 hover:bg-gray-800 hover:text-gray-200"
+                          }`}
+                        >
+                          <span className={`text-xs uppercase font-medium tracking-widest ${isSelected ? "text-gray-900/70" : "text-gray-500"}`}>
+                            {formatDayName(d)}
+                          </span>
+                          <span className="text-2xl font-bold mt-1 mb-0.5">{formatDayNumber(d)}</span>
+                          <span className={`text-xs font-medium ${isSelected ? "text-gray-900/70" : "text-gray-600"}`}>
+                            {formatMonthName(d)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="bg-gray-900/30 border border-gray-800/60 rounded-3xl p-8">
+                  {reservationsQuery.isLoading ? (
+                     <div className="animate-pulse h-32 bg-gray-800/30 rounded-2xl w-full"></div>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                      {HOURS.map(hour => {
+                        const status = getSlotStatus(hour);
+                        let btnClass = "py-4 rounded-2xl border text-sm font-medium transition-all flex flex-col items-center justify-center ";
+                        
+                        if (status === "booked") {
+                          btnClass += "bg-gray-950 border-gray-900 text-gray-700 cursor-not-allowed";
+                        } else if (status === "selected") {
+                          btnClass += "bg-emerald-500 border-emerald-400 text-gray-950 shadow-lg shadow-emerald-500/30 scale-105 z-10";
+                        } else {
+                          btnClass += "bg-gray-900/50 border-gray-700 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50 cursor-pointer";
+                        }
+
+                        return (
+                          <button key={hour} disabled={status === "booked"} onClick={() => toggleSlot(hour)} className={btnClass}>
+                            <span>{String(hour).padStart(2, '0')}:00</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {selectedSlots.length > 0 && (
+                    <div className="mt-8 flex items-center justify-between p-5 bg-[#09090b] border border-gray-800 rounded-3xl animate-slide-in">
+                      <div>
+                        <p className="text-gray-400 text-sm">Você selecionou</p>
+                        <p className="text-emerald-400 font-bold text-lg">{selectedSlots.length} {selectedSlots.length === 1 ? "sessão" : "sessões"}</p>
+                      </div>
+                      <button onClick={handleBook} className={btnPrimary}>
+                        Avançar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </main>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
+      {activeModal === "createRoom" && (
+        <Modal title="Nova Sala" onClose={() => setActiveModal(null)}>
+          <form onSubmit={e => { e.preventDefault(); createRoom.mutate({ name: roomForm.name, capacity: Number(roomForm.capacity) }); }} className="space-y-5">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Nome da Sala</label>
+              <input type="text" value={roomForm.name} onChange={e => setRoomForm({...roomForm, name: e.target.value})} className={inputClasses} required />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Capacidade</label>
+              <input type="number" value={roomForm.capacity} onChange={e => setRoomForm({...roomForm, capacity: e.target.value})} className={inputClasses} required />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <button type="button" onClick={() => setActiveModal(null)} className={btnSecondary}>Cancelar</button>
+              <button type="submit" disabled={createRoom.isPending} className={btnPrimary}>Salvar</button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
-      {/* Create / Edit Room */}
-      {(activeModal === "createRoom" || activeModal === "editRoom") && (
-        <Modal
-          title={
-            activeModal === "createRoom" ? "Nova Sala" : "Editar Sala"
-          }
-          onClose={() => {
-            setActiveModal(null);
-            setSelectedRoom(null);
-          }}
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const data = {
-                name: roomForm.name,
-                capacity: Number(roomForm.capacity),
-              };
-              if (activeModal === "createRoom") {
-                createRoom.mutate(data);
-              } else if (selectedRoom) {
-                updateRoom.mutate({ id: selectedRoom.id, data });
-              }
-            }}
-            className="space-y-4"
-          >
+      {activeModal === "createReservation" && (
+        <Modal title="Detalhes da Reserva" onClose={() => setActiveModal(null)}>
+          <form onSubmit={submitReservation} className="space-y-5">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Nome da Sala
-              </label>
-              <input
-                type="text"
-                value={roomForm.name}
-                onChange={(e) =>
-                  setRoomForm({ ...roomForm, name: e.target.value })
-                }
-                placeholder="Ex: Sala de Reuniões A"
-                className={inputClasses}
-                required
-              />
+              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Título da Reunião</label>
+              <input type="text" value={resForm.title} onChange={e => setResForm({...resForm, title: e.target.value})} placeholder="Ex: Sync Semanal" className={inputClasses} required />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Capacidade (pessoas)
-              </label>
-              <input
-                type="number"
-                value={roomForm.capacity}
-                onChange={(e) =>
-                  setRoomForm({ ...roomForm, capacity: e.target.value })
-                }
-                placeholder="Ex: 10"
-                min={1}
-                className={inputClasses}
-                required
-              />
+              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Número de Participantes</label>
+              <input type="number" min="1" value={resForm.participants} onChange={e => setResForm({...resForm, participants: e.target.value})} className={inputClasses} required />
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  setSelectedRoom(null);
-                }}
-                className={buttonSecondary}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={createRoom.isPending || updateRoom.isPending}
-                className={buttonPrimary}
-              >
-                {createRoom.isPending || updateRoom.isPending
-                  ? "Salvando..."
-                  : "Salvar"}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Recorrência</label>
+              <select value={resForm.recurrenceType} onChange={e => setResForm({...resForm, recurrenceType: e.target.value})} className={inputClasses}>
+                <option value="none">Não repetir</option>
+                <option value="daily">Repetir diariamente</option>
+                <option value="weekly">Repetir semanalmente</option>
+              </select>
+            </div>
+            {resForm.recurrenceType !== "none" && (
+              <div className="animate-slide-in">
+                <label className="block text-xs font-medium text-gray-400 mb-2 pl-1">Por quantas vezes?</label>
+                <input type="number" min="2" max="52" value={resForm.recurrenceOccurrences} onChange={e => setResForm({...resForm, recurrenceOccurrences: e.target.value})} className={inputClasses} required />
+              </div>
+            )}
+            
+            <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl mt-6">
+              <p className="text-emerald-400 text-sm font-medium">Sessões: {selectedSlots.length} ({selectedSlots.length} horas)</p>
+              <p className="text-gray-400 text-xs mt-1">Data base: {selectedDate.split("-").reverse().join("/")}</p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button type="button" onClick={() => setActiveModal(null)} className={btnSecondary}>Voltar</button>
+              <button type="submit" disabled={createReservation.isPending} className={btnPrimary}>
+                {createReservation.isPending ? "Reservando..." : "Confirmar"}
               </button>
             </div>
           </form>
         </Modal>
       )}
 
-      {/* Create / Edit Reservation */}
-      {(activeModal === "createReservation" ||
-        activeModal === "editReservation") && (
-        <Modal
-          title={
-            activeModal === "createReservation"
-              ? "Nova Reserva"
-              : "Editar Reserva"
-          }
-          onClose={() => {
-            setActiveModal(null);
-            setSelectedReservation(null);
-          }}
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const data = {
-                roomId: resForm.roomId,
-                title: resForm.title,
-                participants: Number(resForm.participants),
-                startTime: new Date(resForm.startTime).toISOString(),
-                endTime: new Date(resForm.endTime).toISOString(),
-              };
-              if (activeModal === "createReservation") {
-                createReservation.mutate(data);
-              } else if (selectedReservation) {
-                updateReservation.mutate({
-                  id: selectedReservation.id,
-                  data,
-                });
-              }
-            }}
-            className="space-y-4"
-          >
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Sala
-              </label>
-              <select
-                value={resForm.roomId}
-                onChange={(e) =>
-                  setResForm({ ...resForm, roomId: e.target.value })
-                }
-                className={inputClasses}
-                required
-              >
-                <option value="">Selecione uma sala</option>
-                {roomsQuery.data?.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name} (até {room.capacity} pessoas)
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Título da Reunião
-              </label>
-              <input
-                type="text"
-                value={resForm.title}
-                onChange={(e) =>
-                  setResForm({ ...resForm, title: e.target.value })
-                }
-                placeholder="Ex: Daily Standup"
-                className={inputClasses}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Número de Participantes
-              </label>
-              <input
-                type="number"
-                value={resForm.participants}
-                onChange={(e) =>
-                  setResForm({ ...resForm, participants: e.target.value })
-                }
-                placeholder="Ex: 5"
-                min={1}
-                className={inputClasses}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Início
-                </label>
-                <input
-                  type="datetime-local"
-                  value={resForm.startTime}
-                  onChange={(e) =>
-                    setResForm({ ...resForm, startTime: e.target.value })
-                  }
-                  className={inputClasses}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Término
-                </label>
-                <input
-                  type="datetime-local"
-                  value={resForm.endTime}
-                  onChange={(e) =>
-                    setResForm({ ...resForm, endTime: e.target.value })
-                  }
-                  className={inputClasses}
-                  required
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  setSelectedReservation(null);
-                }}
-                className={buttonSecondary}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={
-                  createReservation.isPending || updateReservation.isPending
-                }
-                className={buttonPrimary}
-              >
-                {createReservation.isPending || updateReservation.isPending
-                  ? "Salvando..."
-                  : "Salvar"}
-              </button>
-            </div>
-          </form>
+      {activeModal === "viewReservations" && (
+        <Modal title={`Reservas do dia`} onClose={() => setActiveModal(null)}>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 base-ui-disable-scrollbar">
+            {!reservationsQuery.data?.length ? (
+              <p className="text-gray-500 text-sm text-center py-6">Nenhuma reserva confirmada para este dia.</p>
+            ) : (
+              reservationsQuery.data.map(res => {
+                const h1 = new Date(res.startTime).getUTCHours();
+                const h2 = new Date(res.endTime).getUTCHours();
+                return (
+                  <div key={res.id} className="p-4 bg-gray-900 border border-gray-800 rounded-2xl flex justify-between items-center group">
+                    <div>
+                      <h4 className="font-semibold text-gray-200">{res.title}</h4>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {String(h1).padStart(2, '0')}:00 - {String(h2).padStart(2, '0')}:00 • {res.participants} pessoas
+                        {res.seriesId && <span className="ml-2 text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">Recorrente</span>}
+                      </p>
+                    </div>
+                    <button onClick={() => { if(confirm("Cancelar esta reserva?")) deleteReservation.mutate(res.id); }} className="text-gray-500 group-hover:text-red-400 p-2 rounded-xl text-xs transition-all">✕</button>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </Modal>
       )}
     </Fragment>
